@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Test Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet" />
+  <style>
+    body { margin: 0; background: #111827; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState } = React;
+
+// ===== EXCHANGE RATES =====
+const FX_USD = 1.37;
+const FX_INR = 0.015;
+const U = usd => usd * FX_USD;
+
+// ===== FORMATTERS =====
+const fmt = v => (v < 0 ? "-s" : "") + "$" + Math.abs(Math.round(v)).toLocaleString("en-CA");
+const fmtP = v => v.toFixed(1) + "%";
+const fmtK = v => v >= 1e6 ? "$" + (v / 1e6).toFixed(2) + "M" : "$" + Math.round(v / 1000).toLocaleString("en-CA") + "K";
+function fmtINR(cad) {
+  const inr = cad / FX_INR;
+  if (inr >= 1e7) return "₹" + (inr / 1e7).toFixed(2) + " Cr";
+  if (inr >= 1e5) return "₹" + (inr / 1e5).toFixed(2) + " L";
+  return "₹" + Math.round(inr).toLocaleString("en-IN");
+}
+
+// ===== REAL ESTATE =====
+const reProps = [
+  { label: "Primary Home", mv: 380000, mort: 318202.47, share: 1, pmt: 2012.93 },
+  { label: "Investment Property (1/3)", mv: 375000, mort: 251982.42, share: 1 / 3, pmt: 1427.76 },
+];
+const reValue = reProps.reduce((s, p) => s + p.mv * p.share, 0);
+const reMort = reProps.reduce((s, p) => s + p.mort * p.share, 0);
+const reEquity = reValue - reMort;
+const moPmt = reProps.reduce((s, p) => s + p.pmt * p.share, 0);
+
+// ===== CASH =====
+const wsCashAccts = [
+  { n: "Chequing", v: 48962.94 }, { n: "Emergency", v: 11368.27 }, { n: "Home", v: 5319.85 },
+  { n: "Vacation", v: 3794.01 }, { n: "Savings", v: 3577.41 }, { n: "Study", v: 1972.91 },
+  { n: "Baby", v: 1306.62 }, { n: "Dog", v: 200 }, { n: "Opportunity Fund", v: 0.50 },
+];
+const wsCash = 76502.51;
+const wsIdle = { RRSP: 5968.87, TFSA: 1630.51, "Non-Reg": 16.40 };
+const wsIdleT = Object.values(wsIdle).reduce((s, v) => s + v, 0);
+const bankCash = [{ n: "TD", v: 18648.64 }, { n: "Scotia", v: 7333.46 }, { n: "CIBC", v: 4420.60 }, { n: "BMO", v: 4000 }];
+const bankT = bankCash.reduce((s, c) => s + c.v, 0);
+const indCash = 800000 * FX_INR;
+const qtCash = 206.60;
+const totalCash = wsCash + bankT + indCash + qtCash + wsIdleT;
+
+// ===== HOLDINGS =====
+const simple = [
+  // Metals
+  { n: "CGL", cad: 3258.76, cls: "Metals", sub: "Gold", geo: "CA", denom: "CAD" },
+  { n: "CGL.C", cad: 11746.81, cls: "Metals", sub: "Gold", geo: "CA", denom: "CAD" },
+  { n: "SVR", cad: 701.09, cls: "Metals", sub: "Silver", geo: "CA", denom: "CAD" },
+  { n: "India Gold", cad: (19386 + 96384) * FX_INR, cls: "Metals", sub: "Gold", geo: "IN", denom: "INR" },
+  { n: "India Silver", cad: 122987 * FX_INR, cls: "Metals", sub: "Silver", geo: "IN", denom: "INR" },
+  // Crypto
+  { n: "BTC Direct", cad: 191.08, cls: "Crypto", sub: "Bitcoin", denom: "CRYPTO" },
+  { n: "ETH Direct", cad: 16.65, cls: "Crypto", sub: "Ethereum", denom: "CRYPTO" },
+  { n: "BTCC.B RRSP", cad: 4938.35, cls: "Crypto", sub: "Bitcoin", denom: "CAD" },
+  { n: "BTCC.B TFSA", cad: 152.28, cls: "Crypto", sub: "Bitcoin", denom: "CAD" },
+  { n: "BTCC.B QT", cad: 667.16, cls: "Crypto", sub: "Bitcoin", denom: "CAD" },
+  { n: "ETHH.B", cad: 3373.93, cls: "Crypto", sub: "Ethereum", denom: "CAD" },
+  // Debt
+  { n: "HPYT.B", cad: 54.70, cls: "Debt", denom: "CAD" },
+  { n: "India Liquid/Arb", cad: (12864 + 56103 + 55706) * FX_INR, cls: "Debt", denom: "INR" },
+  // RE (REITs)
+  { n: "REI.UN", cad: 23.27, cls: "RE", denom: "CAD" },
+  { n: "O", cad: U(65.52), cls: "RE", denom: "USD" },
+  { n: "VRE", cad: 1379.87, cls: "RE", denom: "CAD" },
+  // Equity
+  { n: "VFV RRSP", cad: 15978.48, cls: "Equity", geo: "US", cap: "L", sector: "SP500", denom: "CAD" },
+  { n: "VFV TFSA", cad: 14965.54, cls: "Equity", geo: "US", cap: "L", sector: "SP500", denom: "CAD" },
+  { n: "VFV QT", cad: 10004.40, cls: "Equity", geo: "US", cap: "L", sector: "SP500", denom: "CAD" },
+  { n: "VOO", cad: U(521.60), cls: "Equity", geo: "US", cap: "L", sector: "SP500", denom: "USD" },
+  { n: "XQQ RRSP", cad: 7812.68, cls: "Equity", geo: "US", cap: "L", sector: "NDX", denom: "CAD" },
+  { n: "XQQ TFSA", cad: 10456.88, cls: "Equity", geo: "US", cap: "L", sector: "NDX", denom: "CAD" },
+  { n: "XQQ QT", cad: 365.58, cls: "Equity", geo: "US", cap: "L", sector: "NDX", denom: "CAD" },
+  { n: "QQQM", cad: U(473.33), cls: "Equity", geo: "US", cap: "L", sector: "NDX", denom: "USD" },
+  { n: "QQQ", cad: U(129.89), cls: "Equity", geo: "US", cap: "L", sector: "NDX", denom: "USD" },
+  { n: "VXUS", cad: U(821.97), cls: "Equity", geo: "INTL", cap: "L", sector: "BROAD", denom: "USD" },
+  { n: "VDY", cad: 448.70, cls: "Equity", geo: "CA", cap: "L", sector: "FIN55", denom: "CAD" },
+  { n: "ZEB", cad: 1017.91, cls: "Equity", geo: "CA", cap: "L", sector: "Fin", denom: "CAD" },
+  { n: "INDA RRSP", cad: U(727.35), cls: "Equity", geo: "IN", cap: "L", sector: "BROAD", denom: "USD" },
+  { n: "INDA QT", cad: U(52.74), cls: "Equity", geo: "IN", cap: "L", sector: "BROAD", denom: "USD" },
+  { n: "INDY", cad: U(37.77), cls: "Equity", geo: "IN", cap: "L", sector: "BROAD", denom: "USD" },
+  { n: "SHLD NR", cad: 702.35, cls: "Equity", geo: "US60INTL40", cap: "L", sector: "Def", denom: "CAD" },
+  { n: "SHLD RRSP", cad: 149.93, cls: "Equity", geo: "US60INTL40", cap: "L", sector: "Def", denom: "CAD" },
+  { n: "SHLD TFSA", cad: 380.43, cls: "Equity", geo: "US60INTL40", cap: "L", sector: "Def", denom: "CAD" },
+  { n: "RTX TFSA", cad: U(214.80), cls: "Equity", geo: "US", cap: "L", sector: "Def", denom: "USD" },
+  { n: "RTX QT", cad: U(1018.10), cls: "Equity", geo: "US", cap: "L", sector: "Def", denom: "USD" },
+  { n: "AC", cad: 275.99, cls: "Equity", geo: "CA", cap: "L", sector: "Ind", denom: "CAD" },
+  { n: "ACO.X", cad: 212.39, cls: "Equity", geo: "CA", cap: "M", sector: "Util", denom: "CAD" },
+  { n: "BAM", cad: 39.35, cls: "Equity", geo: "CA", cap: "L", sector: "Fin", denom: "CAD" },
+  { n: "BCE", cad: 131.58, cls: "Equity", geo: "CA", cap: "L", sector: "Comm", denom: "CAD" },
+  { n: "BN", cad: 198.49, cls: "Equity", geo: "CA", cap: "L", sector: "Fin", denom: "CAD" },
+  { n: "CU", cad: 686.46, cls: "Equity", geo: "CA", cap: "M", sector: "Util", denom: "CAD" },
+  { n: "DOL", cad: 89.05, cls: "Equity", geo: "CA", cap: "L", sector: "ConD", denom: "CAD" },
+  { n: "EIT.UN", cad: 169.08, cls: "Equity", geo: "CA", cap: "M", sector: "BROAD", denom: "CAD" },
+  { n: "ENB", cad: 164.10, cls: "Equity", geo: "CA", cap: "L", sector: "Eng", denom: "CAD" },
+  { n: "FLT", cad: 0.66, cls: "Equity", geo: "CA", cap: "S", sector: "Ind", denom: "CAD" },
+  { n: "FTS", cad: 255.62, cls: "Equity", geo: "CA", cap: "L", sector: "Util", denom: "CAD" },
+  { n: "MFC", cad: 228.96, cls: "Equity", geo: "CA", cap: "L", sector: "Fin", denom: "CAD" },
+  { n: "MG", cad: 304.89, cls: "Equity", geo: "CA", cap: "L", sector: "ConD", denom: "CAD" },
+  { n: "NTR", cad: 428.89, cls: "Equity", geo: "CA", cap: "L", sector: "Mat", denom: "CAD" },
+  { n: "QSR", cad: 517.32, cls: "Equity", geo: "CA", cap: "L", sector: "ConD", denom: "CAD" },
+  { n: "RY", cad: 512.63, cls: "Equity", geo: "CA", cap: "L", sector: "Fin", denom: "CAD" },
+  { n: "SHOP", cad: 1837.60, cls: "Equity", geo: "CA", cap: "L", sector: "Tech", denom: "CAD" },
+  { n: "SU", cad: 431.89, cls: "Equity", geo: "CA", cap: "L", sector: "Eng", denom: "CAD" },
+  { n: "AAPL WS", cad: U(265.98), cls: "Equity", geo: "US", cap: "L", sector: "Tech", denom: "USD" },
+  { n: "AAPL QT", cad: U(259.54), cls: "Equity", geo: "US", cap: "L", sector: "Tech", denom: "USD" },
+  { n: "AZN", cad: U(221.37), cls: "Equity", geo: "US", cap: "L", sector: "HC", denom: "USD" },
+  { n: "PFE", cad: U(291.16), cls: "Equity", geo: "US", cap: "L", sector: "HC", denom: "USD" },
+  // India Zerodha
+  { n: "India Large MFs", cad: (265063 + 267309 + 7231 + 8223) * FX_INR, cls: "Equity", geo: "IN", cap: "L", sector: "BROAD", denom: "INR" },
+  { n: "India Mid MF", cad: 233364 * FX_INR, cls: "Equity", geo: "IN", cap: "M", sector: "BROAD", denom: "INR" },
+  { n: "India Small MF", cad: 108734 * FX_INR, cls: "Equity", geo: "IN", cap: "S", sector: "BROAD", denom: "INR" },
+  { n: "India Defence MF", cad: 128515 * FX_INR, cls: "Equity", geo: "IN", cap: "L", sector: "Def", denom: "INR" },
+  { n: "India Pharma MF", cad: 32112 * FX_INR, cls: "Equity", geo: "IN", cap: "L", sector: "HC", denom: "INR" },
+  { n: "India Stocks Fin", cad: (57530 + 28794 + 7922 + 6129 + 7953 + 3027 + 1286) * FX_INR, cls: "Equity", geo: "IN", cap: "M", sector: "Fin", denom: "INR" },
+  { n: "India Stocks Tech", cad: (2272 + 29206 + 9473 + 1112 + 2873 + 2852) * FX_INR, cls: "Equity", geo: "IN", cap: "M", sector: "Tech", denom: "INR" },
+  { n: "India Stocks Ind", cad: (6070 + 2574 + 3691 + 2909 + 1892 + 1512 + 1802 + 864) * FX_INR, cls: "Equity", geo: "IN", cap: "M", sector: "Ind", denom: "INR" },
+  { n: "India Stocks Other", cad: (4475 + 7262 + 1228 + 1630 + 1130 + 12912 + 4001) * FX_INR, cls: "Equity", geo: "IN", cap: "M", sector: "Other", denom: "INR" },
+];
+
+// Commonwealth RRSP — LifePath 2055 (~93% equity, 5% debt, 2% real assets)
+const cwTotal = 65893.62;
+const cwEquity = cwTotal * 0.93;
+const cwDebt = cwTotal * 0.05;
+const cwRE = cwTotal * 0.02;
+const cwHoldings = [
+  { n: "CW LifePath→Equity", cad: cwEquity, cls: "Equity", geo: "GLOBAL", cap: "L80M15S5", sector: "BROAD", denom: "CAD" },
+  { n: "CW LifePath→Debt", cad: cwDebt, cls: "Debt", denom: "CAD" },
+  { n: "CW LifePath→RE", cad: cwRE, cls: "RE", denom: "CAD" },
+];
+
+// VEQT/XEQT decomposition
+const veqtT = 2589.43 + 12993.08 + 9083.32 + 4592.82;
+const xeqtT = 8284.45;
+const veqtD = [
+  { n: "VEQT CA", cad: veqtT * 0.30, cls: "Equity", geo: "CA", cap: "L70M25S5", sector: "BROAD", denom: "CAD" },
+  { n: "VEQT US", cad: veqtT * 0.40, cls: "Equity", geo: "US", cap: "L80M15S5", sector: "BROAD", denom: "CAD" },
+  { n: "VEQT Intl", cad: veqtT * 0.23, cls: "Equity", geo: "INTL", cap: "L75M20S5", sector: "BROAD", denom: "CAD" },
+  { n: "VEQT EM", cad: veqtT * 0.07, cls: "Equity", geo: "EM", cap: "L75M20S5", sector: "BROAD", denom: "CAD" },
+];
+const xeqtD = [
+  { n: "XEQT CA", cad: xeqtT * 0.25, cls: "Equity", geo: "CA", cap: "L70M25S5", sector: "BROAD", denom: "CAD" },
+  { n: "XEQT US", cad: xeqtT * 0.45, cls: "Equity", geo: "US", cap: "L80M15S5", sector: "BROAD", denom: "CAD" },
+  { n: "XEQT Intl", cad: xeqtT * 0.23, cls: "Equity", geo: "INTL", cap: "L75M20S5", sector: "BROAD", denom: "CAD" },
+  { n: "XEQT EM", cad: xeqtT * 0.07, cls: "Equity", geo: "EM", cap: "L75M20S5", sector: "BROAD", denom: "CAD" },
+];
+// CW LifePath equity geo decomposition (~40% US, 25% CA, 25% Intl, 10% EM)
+const cwEqD = [
+  { n: "CW US", cad: cwEquity * 0.40, cls: "Equity", geo: "US", cap: "L80M15S5", sector: "BROAD", denom: "CAD" },
+  { n: "CW CA", cad: cwEquity * 0.25, cls: "Equity", geo: "CA", cap: "L70M25S5", sector: "BROAD", denom: "CAD" },
+  { n: "CW Intl", cad: cwEquity * 0.25, cls: "Equity", geo: "INTL", cap: "L75M20S5", sector: "BROAD", denom: "CAD" },
+  { n: "CW EM", cad: cwEquity * 0.10, cls: "Equity", geo: "EM", cap: "L75M20S5", sector: "BROAD", denom: "CAD" },
+];
+
+// Wife's India MFs (lump sum, no SIPs)
+const wifeIndiaMFs = [
+  { n: "Axis Mid Cap", cad: 103477 * FX_INR, cls: "Equity", geo: "IN", cap: "M", sector: "BROAD", denom: "INR" },
+  { n: "Canara Large&Mid", cad: 73962 * FX_INR, cls: "Equity", geo: "IN", cap: "L70M30", sector: "BROAD", denom: "INR" },
+  { n: "Canara ELSS Tax Saver", cad: 93163 * FX_INR, cls: "Equity", geo: "IN", cap: "L70M25S5", sector: "BROAD", denom: "INR" },
+  { n: "Mirae Large&Midcap", cad: 76949 * FX_INR, cls: "Equity", geo: "IN", cap: "L70M30", sector: "BROAD", denom: "INR" },
+  { n: "Mirae ELSS Tax Saver", cad: 77784 * FX_INR, cls: "Equity", geo: "IN", cap: "L70M25S5", sector: "BROAD", denom: "INR" },
+];
+const wifeIndiaTotal = 425336; // INR
+
+const allH = [...simple, { n: "CW Debt", cad: cwDebt, cls: "Debt", denom: "CAD" }, { n: "CW RE", cad: cwRE, cls: "RE", denom: "CAD" }, ...veqtD, ...xeqtD, ...cwEqD, ...wifeIndiaMFs];
+
+// Aggregations
+const byCls = {};
+allH.forEach(h => { byCls[h.cls] = (byCls[h.cls] || 0) + h.cad; });
+const eqH = allH.filter(h => h.cls === "Equity");
+const eqT = eqH.reduce((s, h) => s + h.cad, 0);
+const metH = allH.filter(h => h.cls === "Metals");
+const metT = metH.reduce((s, h) => s + h.cad, 0);
+const cryH = allH.filter(h => h.cls === "Crypto");
+const cryT = cryH.reduce((s, h) => s + h.cad, 0);
+const investedT = allH.reduce((s, h) => s + h.cad, 0);
+const totalAssets = investedT + totalCash + reValue;
+const netWorth = totalAssets - reMort;
+const inv = investedT + totalCash;
+
+// ===== HELPERS =====
+function geoOf(h) {
+  const g = h.geo || "";
+  if (g.includes("60")) return [{ k: "US", p: 0.6 }, { k: "Intl Developed", p: 0.4 }];
+  if (g === "US") return [{ k: "US", p: 1 }];
+  if (g === "CA") return [{ k: "Canada", p: 1 }];
+  if (g === "IN") return [{ k: "India", p: 1 }];
+  if (g === "EM") return [{ k: "Emerging Markets", p: 1 }];
+  if (g === "INTL") return [{ k: "Intl Developed", p: 1 }];
+  if (g === "GLOBAL") return [{ k: "US", p: 0.4 }, { k: "Canada", p: 0.25 }, { k: "Intl Developed", p: 0.25 }, { k: "Emerging Markets", p: 0.1 }];
+  return [{ k: "Other", p: 1 }];
+}
+function capOf(h) {
+  const c = h.cap || "L";
+  if (c.includes("L70M30")) return [{ k: "Large", p: 0.70 }, { k: "Mid", p: 0.30 }];
+  if (c.includes("L70M25")) return [{ k: "Large", p: 0.70 }, { k: "Mid", p: 0.25 }, { k: "Small", p: 0.05 }];
+  if (c.includes("L70")) return [{ k: "Large", p: 0.70 }, { k: "Mid", p: 0.25 }, { k: "Small", p: 0.05 }];
+  if (c.includes("L75")) return [{ k: "Large", p: 0.75 }, { k: "Mid", p: 0.20 }, { k: "Small", p: 0.05 }];
+  if (c.includes("L80")) return [{ k: "Large", p: 0.80 }, { k: "Mid", p: 0.15 }, { k: "Small", p: 0.05 }];
+  if (c === "M") return [{ k: "Mid", p: 1 }];
+  if (c === "S") return [{ k: "Small", p: 1 }];
+  return [{ k: "Large", p: 1 }];
+}
+const sN = { Tech: "Technology", Fin: "Financials", HC: "Healthcare", ConD: "Consumer Disc", ConS: "Consumer Staples", Ind: "Industrials", Eng: "Energy", Util: "Utilities", Mat: "Materials", Comm: "Communications", RE: "Real Estate", Def: "Defence", Other: "Other" };
+function secOf(h) {
+  const s = h.sector || "Other";
+  if (s === "SP500") return [{ k: "Tech", p: .32 }, { k: "Fin", p: .13 }, { k: "HC", p: .12 }, { k: "ConD", p: .11 }, { k: "Comm", p: .09 }, { k: "Ind", p: .09 }, { k: "ConS", p: .06 }, { k: "Eng", p: .04 }, { k: "Util", p: .02 }, { k: "RE", p: .01 }, { k: "Mat", p: .01 }];
+  if (s === "NDX") return [{ k: "Tech", p: .50 }, { k: "ConD", p: .18 }, { k: "HC", p: .07 }, { k: "Comm", p: .06 }, { k: "ConS", p: .05 }, { k: "Ind", p: .05 }, { k: "Util", p: .04 }, { k: "Other", p: .05 }];
+  if (s === "BROAD") return [{ k: "Tech", p: .20 }, { k: "Fin", p: .17 }, { k: "HC", p: .10 }, { k: "ConD", p: .10 }, { k: "Ind", p: .10 }, { k: "Comm", p: .06 }, { k: "ConS", p: .06 }, { k: "Eng", p: .06 }, { k: "Mat", p: .05 }, { k: "Util", p: .04 }, { k: "RE", p: .03 }, { k: "Other", p: .03 }];
+  if (s === "FIN55") return [{ k: "Fin", p: .55 }, { k: "Eng", p: .20 }, { k: "Util", p: .15 }, { k: "Comm", p: .10 }];
+  return [{ k: s, p: 1 }];
+}
+function agg(holdings, fn) {
+  const m = {};
+  holdings.forEach(h => { fn(h).forEach(({ k, p }) => { m[k] = (m[k] || 0) + h.cad * p; }); });
+  return Object.entries(m).sort((a, b) => b[1] - a[1]);
+}
+
+// Currency denomination
+const denomMap = {};
+allH.forEach(h => { const d = h.denom || "CAD"; denomMap[d] = (denomMap[d] || 0) + h.cad; });
+denomMap["CAD"] = (denomMap["CAD"] || 0) + wsCash + bankT + wsIdleT + qtCash;
+denomMap["INR"] = (denomMap["INR"] || 0) + indCash;
+const denomTotal = Object.values(denomMap).reduce((s, v) => s + v, 0);
+const denomLabels = { CAD: "🇨🇦 CAD", USD: "🇺🇸 USD", INR: "🇮🇳 INR", CRYPTO: "₿ Crypto" };
+const denomColors = { CAD: "#ef4444", USD: "#3b82f6", INR: "#f97316", CRYPTO: "#eab308" };
+
+// Economic exposure
+const ecoMap = {};
+allH.forEach(h => { geoOf(h).forEach(({ k, p }) => { ecoMap[k] = (ecoMap[k] || 0) + h.cad * p; }); });
+ecoMap["Canada"] = (ecoMap["Canada"] || 0) + wsCash + bankT + wsIdleT + qtCash + reEquity;
+ecoMap["India"] = (ecoMap["India"] || 0) + indCash;
+const ecoTotal = Object.values(ecoMap).reduce((s, v) => s + v, 0);
+
+// ===== RETIREMENT PROJECTION =====
+const RET_AGE = 32;
+const RET_YRS = 18;
+const RET_CASH_KEEP = 54000;
+const RET_DEPLOYABLE = totalCash - RET_CASH_KEEP;
+const RET_BASE_OWN = 4138;
+const RET_EMPLOYER = 583;
+const RET_CW = 583;
+const RET_TOTAL_MO = RET_BASE_OWN + RET_EMPLOYER + RET_CW;
+const RET_SURPLUS = 12000 - 4500 - RET_BASE_OWN;
+
+function retProject(lump, extraMo, rate) {
+  let p = investedT - totalCash + RET_CASH_KEEP + lump;
+  // Actually: start = all current investments + cash we keep
+  p = investedT + RET_CASH_KEEP + lump;
+  const annOwn = (RET_BASE_OWN + extraMo) * 12;
+  const annFixed = (RET_EMPLOYER + RET_CW) * 12;
+  const data = [{ age: RET_AGE, value: p }];
+  for (let y = 1; y <= RET_YRS; y++) {
+    let m = 1.0;
+    if (y >= 2 && y <= 5) m = 0.80;
+    if (y >= 6 && y <= 10) m = 0.90;
+    if (y === 3) m = 0.50;
+    p = p * (1 + rate) + annOwn * Math.pow(1.02, y) * m + annFixed * Math.pow(1.02, y);
+    data.push({ age: RET_AGE + y, value: p });
+  }
+  return data;
+}
+
+// ===== COLORS =====
+const mCol = { Equity: "#3b82f6", Metals: "#eab308", REITs: "#a78bfa", "Debt/Fixed Income": "#6b7280", Crypto: "#f97316", Cash: "#22c55e", "RE Equity": "#7c3aed" };
+const geoCol = { US: "#3b82f6", Canada: "#ef4444", India: "#f97316", "Intl Developed": "#22c55e", "Emerging Markets": "#eab308", Other: "#6b7280" };
+const capCol = { "Large Cap": "#3b82f6", "Mid Cap": "#f59e0b", "Small Cap": "#ef4444" };
+const secCol = ["#3b82f6", "#ef4444", "#22c55e", "#f97316", "#eab308", "#8b5cf6", "#ec4899", "#14b8a6", "#6366f1", "#0891b2", "#84cc16", "#d97706", "#6b7280"];
+
+// ===== COMPONENTS =====
+function Bar({ label, pct, color, value, target }) {
+  return (
+    <div className="mb-2.5">
+      <div className="flex justify-between text-sm mb-0.5">
+        <span className="font-medium text-xs">{label}</span>
+        <div>
+          <span className="font-bold text-xs" style={{ color }}>{fmtP(pct)}</span>
+          {value != null && <span className="text-gray-400 ml-1 text-xs">{fmt(value)}</span>}
+          {target != null && <span className="text-gray-500 ml-1 text-xs">t:{target}%</span>}
+        </div>
+      </div>
+      <div className="relative h-4 bg-gray-700 rounded overflow-hidden">
+        <div className="h-full rounded" style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: color }} />
+        {target != null && <div className="absolute top-0 h-full border-r-2 border-white border-dashed opacity-50" style={{ left: `${Math.min(target, 100)}%` }} />}
+      </div>
+    </div>
+  );
+}
+function Pie({ data, size = 180 }) {
+  const r = size / 2 - 6, cx = size / 2, cy = size / 2;
+  let cum = 0;
+  return (
+    <svg width={size} height={size}>
+      {data.filter(d => d.pct > 0.3).map((d, i) => {
+        const s = cum; cum += d.pct;
+        const a1 = (s / 100) * 2 * Math.PI - Math.PI / 2;
+        const a2 = (cum / 100) * 2 * Math.PI - Math.PI / 2;
+        return <path key={i} d={`M${cx},${cy} L${cx + r * Math.cos(a1)},${cy + r * Math.sin(a1)} A${r},${r} 0 ${d.pct > 50 ? 1 : 0} 1 ${cx + r * Math.cos(a2)},${cy + r * Math.sin(a2)} Z`} fill={d.color} stroke="#1e1e2e" strokeWidth="1.5" />;
+      })}
+    </svg>
+  );
+}
+function Legend({ data, showINR }) {
+  return (
+    <div className="flex-1 min-w-52">
+      {data.map(d => (
+        <div key={d.label} className="flex items-center justify-between py-1 border-b border-gray-800 text-xs">
+          <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} /><span>{d.label}</span></div>
+          <div className="text-right"><span className="font-bold">{fmtP(d.pct)}</span><span className="text-gray-500 ml-1">{fmt(d.value)}</span>{showINR && <span className="text-gray-600 ml-1">({fmtINR(d.value)})</span>}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+function CS({ data, title, showINR }) {
+  return (<div><h4 className="font-bold text-sm mb-2">{title}</h4><div className="flex gap-4 items-start flex-wrap"><Pie data={data} /><Legend data={data} showINR={showINR} /></div></div>);
+}
+function OvLine({ label, value, color }) {
+  return (
+    <div className="bg-gray-800 rounded-lg p-3">
+      <div className="text-gray-400 text-xs">{label}</div>
+      <div className={`font-bold text-lg ${color}`}>{fmt(value)}</div>
+      <div className="text-gray-500 text-xs">{fmtINR(value)} · {fmtP(value / inv * 100)}</div>
+    </div>
+  );
+}
+function RetChart({ scenarios, target }) {
+  const W = 680, H = 240, pad = { t: 15, r: 20, b: 35, l: 60 };
+  const cW = W - pad.l - pad.r, cH = H - pad.t - pad.b;
+  const allV = scenarios.flatMap(s => s.data.map(d => d.value));
+  const maxV = Math.max(...allV, target) * 1.1;
+  const x = i => pad.l + (i / RET_YRS) * cW;
+  const y = v => pad.t + cH - (v / maxV) * cH;
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`}>
+      {[0, 1e6, 2e6, 3e6, 4e6, 5e6, 6e6, 7e6].filter(v => v <= maxV).map(v => (<g key={v}><line x1={pad.l} y1={y(v)} x2={W - pad.r} y2={y(v)} stroke="#374151" strokeWidth="0.5" /><text x={pad.l - 5} y={y(v) + 4} textAnchor="end" fill="#6b7280" fontSize="9">{v >= 1e6 ? `$${v / 1e6}M` : "$0"}</text></g>))}
+      <line x1={pad.l} y1={y(target)} x2={W - pad.r} y2={y(target)} stroke="#ef4444" strokeWidth="1.5" strokeDasharray="6,4" />
+      <text x={W - pad.r + 2} y={y(target) + 4} fill="#ef4444" fontSize="9">$5M</text>
+      {[32, 35, 38, 41, 44, 47, 50].map(a => (<text key={a} x={x(a - 32)} y={H - 8} textAnchor="middle" fill="#6b7280" fontSize="9">{a}</text>))}
+      {scenarios.map((s, i) => (<polyline key={i} fill="none" stroke={s.color} strokeWidth={s.bold ? "2.5" : "1.2"} opacity={s.bold ? 1 : 0.4} strokeDasharray={s.dashed ? "4,3" : "none"} points={s.data.map((d, j) => `${x(j)},${y(d.value)}`).join(" ")} />))}
+    </svg>
+  );
+}
+
+// ===== MAIN APP =====
+function App() {
+  const [view, setView] = useState("overview");
+  const [drillTab, setDrillTab] = useState("equity");
+  const [eqView, setEqView] = useState("geo");
+  const [retRate, setRetRate] = useState(0.10);
+  const [retCashKeep, setRetCashKeep] = useState(54000);
+  const [retExtra, setRetExtra] = useState(0);
+
+  // Allocation data
+  const master = { Equity: byCls["Equity"] || 0, Metals: byCls["Metals"] || 0, REITs: byCls["RE"] || 0, "Debt/Fixed Income": byCls["Debt"] || 0, Crypto: byCls["Crypto"] || 0, Cash: totalCash };
+  const invData = Object.entries(master).map(([k, v]) => ({ label: k, value: v, pct: v / inv * 100, color: mCol[k] })).filter(d => d.value > 0).sort((a, b) => b.value - a.value);
+  const nwAlloc = { ...master, "RE Equity": reEquity };
+  const nwData = Object.entries(nwAlloc).map(([k, v]) => ({ label: k, value: v, pct: v / netWorth * 100, color: mCol[k] })).filter(d => d.value > 0).sort((a, b) => b.value - a.value);
+
+  // Deep dive data
+  const geoData = agg(eqH, geoOf).map(([k, v]) => ({ label: k, value: v, pct: v / eqT * 100, color: geoCol[k] || "#6b7280" }));
+  const capData = agg(eqH, capOf).map(([k, v]) => ({ label: k + " Cap", value: v, pct: v / eqT * 100, color: capCol[k + " Cap"] || "#6b7280" }));
+  const secData = agg(eqH, h => secOf(h).map(({ k, p }) => ({ k: sN[k] || k, p }))).map(([k, v], i) => ({ label: k, value: v, pct: v / eqT * 100, color: secCol[i % secCol.length] }));
+  const metByType = {};
+  metH.forEach(h => { metByType[h.sub || "Other"] = (metByType[h.sub || "Other"] || 0) + h.cad; });
+  const metData = Object.entries(metByType).map(([k, v], i) => ({ label: k, value: v, pct: v / metT * 100, color: ["#eab308", "#9ca3af"][i] })).sort((a, b) => b.value - a.value);
+  const cryByC = {};
+  cryH.forEach(h => { cryByC[h.sub || "Other"] = (cryByC[h.sub || "Other"] || 0) + h.cad; });
+  const cryData = Object.entries(cryByC).map(([k, v]) => ({ label: k, value: v, pct: v / cryT * 100, color: k === "Bitcoin" ? "#f97316" : "#8b5cf6" })).sort((a, b) => b.value - a.value);
+  const denomData = Object.entries(denomMap).map(([k, v]) => ({ label: denomLabels[k] || k, value: v, pct: v / denomTotal * 100, color: denomColors[k] || "#6b7280" })).sort((a, b) => b.value - a.value);
+  const ecoData = Object.entries(ecoMap).map(([k, v]) => ({ label: k, value: v, pct: v / ecoTotal * 100, color: geoCol[k] || "#6b7280" })).sort((a, b) => b.value - a.value);
+
+  // Retirement scenarios
+  function findNeeded(rate) {
+    let lo = 0, hi = 5000;
+    for (let i = 0; i < 30; i++) {
+      const mid = (lo + hi) / 2;
+      const p = retProject(RET_DEPLOYABLE, mid, rate);
+      if (p[RET_YRS].value < 5000000) lo = mid; else hi = mid;
+    }
+    return Math.ceil((lo + hi) / 2);
+  }
+  const neededExtra = findNeeded(retRate);
+  const retScenarios = [
+    { name: "Do Nothing", lump: 0, extra: 0, color: "#6b7280", dashed: true },
+    { name: "Deploy Cash", lump: RET_DEPLOYABLE, extra: 0, color: "#eab308" },
+    { name: "Deploy + $500/mo", lump: RET_DEPLOYABLE, extra: 500, color: "#3b82f6" },
+    { name: "Deploy + $1K/mo", lump: RET_DEPLOYABLE, extra: 1000, color: "#22c55e" },
+    { name: `Deploy + ${fmt(neededExtra)}/mo`, lump: RET_DEPLOYABLE, extra: neededExtra, color: "#f97316" },
+  ].map(s => {
+    const d = retProject(s.lump, s.extra, retRate);
+    return { ...s, data: d, final: d[RET_YRS].value, hits: d[RET_YRS].value >= 5000000 };
+  });
+
+  const tabs = [
+    { id: "overview", label: "Overview" }, { id: "allocation", label: "Allocation" },
+    { id: "drilldown", label: "Deep Dive" }, { id: "currency", label: "Currency" },
+    { id: "country", label: "Country" }, { id: "realestate", label: "Real Estate" },
+    { id: "gaps", label: "Gap Analysis" }, { id: "retirement", label: "Retirement" },
+  ];
+
+  return (
+    <div className="bg-gray-900 text-gray-100 p-4 min-h-screen" style={{ fontFamily: "system-ui,sans-serif" }}>
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-xl font-bold mb-0.5">Household Net Worth & Retirement Dashboard</h1>
+        <p className="text-gray-400 text-xs mb-3">Fully reconciled · Feb 20, 2026 · USD/CAD: {FX_USD} · INR/CAD: {FX_INR}</p>
+
+        <div className="bg-gray-800 rounded-xl p-4 mb-4 flex gap-4 flex-wrap items-end">
+          <div><div className="text-gray-400 text-xs">Net Worth</div><div className="text-2xl font-bold text-green-400">{fmt(netWorth)}</div></div>
+          <div className="border-l border-gray-700 pl-3"><div className="text-gray-400 text-xs">Invested</div><div className="text-lg font-bold text-blue-400">{fmt(investedT)}</div></div>
+          <div className="border-l border-gray-700 pl-3"><div className="text-gray-400 text-xs">Cash</div><div className="text-lg font-bold text-green-300">{fmt(totalCash)}</div></div>
+          <div className="border-l border-gray-700 pl-3"><div className="text-gray-400 text-xs">RE Equity</div><div className="text-lg font-bold text-purple-400">{fmt(reEquity)}</div></div>
+          <div className="border-l border-gray-700 pl-3"><div className="text-gray-400 text-xs">Debt</div><div className="text-lg font-bold text-red-400">{fmt(-reMort)}</div></div>
+        </div>
+
+        <div className="flex gap-1 mb-4 flex-wrap">
+          {tabs.map(t => (<button key={t.id} onClick={() => setView(t.id)} className={`px-2.5 py-1.5 rounded-lg text-xs font-medium ${view === t.id ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white"}`}>{t.label}</button>))}
+        </div>
+
+        {/* OVERVIEW */}
+        {view === "overview" && (
+          <div className="space-y-3">
+            <h3 className="font-bold text-sm text-red-400">🇨🇦 Canada</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <OvLine label="WS Investments" value={128196.23} color="text-blue-400" />
+              <OvLine label="WS Cash & Savings" value={wsCash} color="text-green-400" />
+              <OvLine label="Commonwealth RRSP (Employer)" value={cwTotal} color="text-cyan-400" />
+              <OvLine label="Questrade TFSA" value={qtCash + 18634.17} color="text-purple-400" />
+              <OvLine label="Bank Chequing (TD, Scotia, CIBC, BMO)" value={bankT} color="text-green-300" />
+            </div>
+            <h3 className="font-bold text-sm text-orange-400">🇮🇳 India</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <OvLine label="Zerodha Investments (₹16,39,930)" value={1639930.22 * FX_INR} color="text-orange-400" />
+              <OvLine label="Wife's India MFs (₹4,25,336)" value={wifeIndiaTotal * FX_INR} color="text-orange-400" />
+              <OvLine label="India Cash (₹8,00,000)" value={indCash} color="text-orange-300" />
+            </div>
+            <div className="bg-gray-800 rounded-xl p-4">
+              <h3 className="font-bold mb-2 text-sm">Platform Distribution</h3>
+              {[
+                { l: "Wealthsimple", v: wsCash + 128196.23, desc: "Investments + Cash & Savings" },
+                { l: "Commonwealth", v: cwTotal, desc: "Employer RRSP · LifePath 2055" },
+                { l: "Questrade", v: qtCash + 18634.17, desc: "TFSA (Wife)" },
+                { l: "Zerodha", v: 1639930.22 * FX_INR, desc: "\u20b916,39,930 · Stocks, MFs & ETFs" },
+                { l: "Canadian Banks", v: bankT, desc: "TD, Scotia, CIBC, BMO" },
+                { l: "Indian Banks", v: indCash, desc: "\u20b98,00,000 · Cash" },
+              ].sort((a, b) => b.v - a.v).map(p => (
+                <div key={p.l} className="flex justify-between items-center py-2 border-b border-gray-700">
+                  <div><div className="text-sm font-medium">{p.l}</div><div className="text-xs text-gray-500">{p.desc}</div></div>
+                  <div className="text-right"><div className="font-bold text-sm">{fmt(p.v)}</div><div className="text-xs text-gray-500">{fmtINR(p.v)}</div></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ALLOCATION */}
+        {view === "allocation" && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="font-bold mb-1 text-sm">Investable Portfolio — {fmt(inv)}</h3>
+              <p className="text-gray-400 text-xs mb-3">Liquid assets only. Includes Commonwealth RRSP.</p>
+              <div className="flex gap-5 items-start flex-wrap mb-3"><Pie data={invData} /><Legend data={invData} /></div>
+              <div className="bg-gray-800 rounded-xl p-4">{invData.map(d => <Bar key={d.label} label={d.label} pct={d.pct} color={d.color} value={d.value} />)}</div>
+            </div>
+            <div>
+              <h3 className="font-bold mb-1 text-sm">Full Net Worth — {fmt(netWorth)}</h3>
+              <p className="text-gray-400 text-xs mb-3">Includes physical RE equity.</p>
+              <div className="flex gap-5 items-start flex-wrap mb-3"><Pie data={nwData} /><Legend data={nwData} /></div>
+              <div className="bg-gray-800 rounded-xl p-4">{nwData.map(d => <Bar key={d.label} label={d.label} pct={d.pct} color={d.color} value={d.value} />)}</div>
+            </div>
+          </div>
+        )}
+
+        {/* DEEP DIVE */}
+        {view === "drilldown" && (
+          <div>
+            <div className="flex gap-2 mb-4">
+              {[{ id: "equity", label: `Equity (${fmt(eqT)})` }, { id: "metals", label: `Metals (${fmt(metT)})` }, { id: "crypto", label: `Crypto (${fmt(cryT)})` }].map(t => (
+                <button key={t.id} onClick={() => setDrillTab(t.id)} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${drillTab === t.id ? "bg-purple-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white"}`}>{t.label}</button>
+              ))}
+            </div>
+            {drillTab === "equity" && (<div>
+              <div className="flex gap-2 mb-4">
+                {[{ id: "geo", label: "🌍 Geography" }, { id: "cap", label: "📊 Market Cap" }, { id: "sec", label: "🏭 Sector" }].map(t => (
+                  <button key={t.id} onClick={() => setEqView(t.id)} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${eqView === t.id ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300 hover:text-white"}`}>{t.label}</button>
+                ))}
+              </div>
+              {eqView === "geo" && <div className="space-y-4"><p className="text-gray-400 text-xs">Country exposure with VEQT/XEQT/LifePath 2055 decomposed by published weights.</p><CS data={geoData} title={`Geographic (${fmt(eqT)})`} /></div>}
+              {eqView === "cap" && <div className="space-y-4"><p className="text-gray-400 text-xs">Large/Mid/Small cap split. ETFs decomposed. India provides most mid/small exposure.</p><CS data={capData} title="Market Cap" /></div>}
+              {eqView === "sec" && <div className="space-y-4"><p className="text-gray-400 text-xs">Sector distribution. VFV/XQQ decomposed by published sector weights.</p><CS data={secData.slice(0, 12)} title="Sector (estimated)" /></div>}
+            </div>)}
+            {drillTab === "metals" && (<div className="space-y-4"><p className="text-gray-400 text-xs">Gold vs Silver across Canadian ETFs and Indian funds.</p><CS data={metData} title="Gold vs Silver" /></div>)}
+            {drillTab === "crypto" && (<div className="space-y-4"><p className="text-gray-400 text-xs">Bitcoin vs Ethereum across direct holdings and ETFs.</p><CS data={cryData} title="Cryptocurrency Distribution" /></div>)}
+          </div>
+        )}
+
+        {/* CURRENCY */}
+        {view === "currency" && (
+          <div className="space-y-4">
+            <h3 className="font-bold text-sm">Currency of Denomination</h3>
+            <p className="text-gray-400 text-xs mb-3">What currency your assets are traded/held in.</p>
+            <div className="flex gap-4 items-start flex-wrap mb-3"><Pie data={denomData} /><Legend data={denomData} showINR /></div>
+            <div className="bg-gray-800 rounded-xl p-4">{denomData.map(d => <Bar key={d.label} label={d.label} pct={d.pct} color={d.color} value={d.value} />)}</div>
+          </div>
+        )}
+
+        {/* COUNTRY */}
+        {view === "country" && (
+          <div className="space-y-4">
+            <h3 className="font-bold text-sm">Country of Economic Exposure</h3>
+            <p className="text-gray-400 text-xs mb-3">Where money is working. Includes RE, cash, decomposed ETFs. Total: {fmt(ecoTotal)}</p>
+            <div className="flex gap-4 items-start flex-wrap mb-3"><Pie data={ecoData} /><Legend data={ecoData} showINR /></div>
+            <div className="bg-gray-800 rounded-xl p-4">{ecoData.map(d => <Bar key={d.label} label={d.label} pct={d.pct} color={d.color} value={d.value} />)}</div>
+            <div className="bg-blue-900 bg-opacity-30 border border-blue-800 rounded-lg p-3 text-xs"><span className="font-bold text-blue-300">💡 </span><span className="text-blue-200">Canada dominates because cash + RE equity sit here. Investment strategy is more globally diversified.</span></div>
+          </div>
+        )}
+
+        {/* REAL ESTATE */}
+        {view === "realestate" && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              {reProps.map(p => { const v = p.mv * p.share, m = p.mort * p.share, e = v - m, ltv = m / v * 100; return (
+                <div key={p.label} className="bg-gray-800 rounded-xl p-4">
+                  <h3 className="font-bold text-purple-300 mb-2 text-sm">{p.label}</h3>
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between"><span className="text-gray-400">Market Value</span><span className="font-bold">{fmt(v)}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">Mortgage</span><span className="text-red-300">{fmt(m)}</span></div>
+                    <div className="flex justify-between border-t border-gray-700 pt-1"><span className="text-gray-400">Equity</span><span className="font-bold text-green-400">{fmt(e)}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">LTV</span><span className={ltv > 80 ? "text-red-400" : "text-yellow-400"}>{fmtP(ltv)}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">Payment</span><span>{fmt(p.pmt * p.share)}/mo</span></div>
+                  </div>
+                </div>
+              ); })}
+            </div>
+            <div className="bg-gray-800 rounded-xl p-4">
+              <div className="grid grid-cols-4 gap-3 text-center">
+                {[{ l: "Total Value", v: reValue, c: "text-purple-400" }, { l: "Total Mortgage", v: reMort, c: "text-red-400" }, { l: "Total Equity", v: reEquity, c: "text-green-400" }, { l: "Monthly", v: moPmt, c: "text-yellow-400", mo: 1 }].map(m => (
+                  <div key={m.l}><div className="text-gray-400 text-xs">{m.l}</div><div className={`font-bold ${m.c}`}>{fmt(m.v)}{m.mo ? "/mo" : ""}</div></div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* GAP ANALYSIS — Cash floor: 1yr expenses, targets on investable remainder */}
+        {view === "gaps" && (() => {
+          const cashFloor = 54000; // 1 year expenses
+          const excessCash = Math.max(totalCash - cashFloor, 0);
+          const investableExCash = investedT + excessCash; // portfolio to allocate (excl. cash floor)
+          const gapItems = [
+            { label: "Equity", val: (byCls["Equity"] || 0) + (byCls["RE"] || 0), target: 70, color: "#3b82f6" },
+            { label: "Metals", val: byCls["Metals"] || 0, target: 15, color: "#eab308" },
+            { label: "Crypto", val: byCls["Crypto"] || 0, target: 10, color: "#f97316" },
+            { label: "Debt/Fixed Income", val: byCls["Debt"] || 0, target: 5, color: "#6b7280" },
+          ];
+          // Cash shown separately
+          return (
+          <div>
+            <h2 className="font-bold mb-1">Gap Analysis — Investable Portfolio</h2>
+            <p className="text-gray-400 text-xs mb-2">Step 1: Set aside 1 year expenses ({fmt(cashFloor)}) as cash reserve. Step 2: Apply allocation targets to the remaining {fmt(investableExCash)}.</p>
+
+            {/* Cash Reserve Box */}
+            <div className="bg-gray-800 rounded-xl p-4 mb-4">
+              <h3 className="font-bold text-sm mb-2 text-green-400">Cash Reserve</h3>
+              <div className="grid grid-cols-3 gap-3 text-center text-xs">
+                <div className="bg-gray-700 rounded-lg p-2">
+                  <div className="text-gray-400">Current Cash</div>
+                  <div className="font-bold text-lg text-green-400">{fmt(totalCash)}</div>
+                </div>
+                <div className="bg-gray-700 rounded-lg p-2">
+                  <div className="text-gray-400">Cash Floor (1yr expenses)</div>
+                  <div className="font-bold text-lg text-yellow-400">{fmt(cashFloor)}</div>
+                </div>
+                <div className="bg-gray-700 rounded-lg p-2">
+                  <div className="text-gray-400">Excess Cash to Deploy</div>
+                  <div className="font-bold text-lg text-orange-400">{fmt(excessCash)}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Allocation Targets on Remaining Portfolio */}
+            <div className="bg-gray-800 rounded-xl p-4 mb-4">
+              <h3 className="font-bold text-sm mb-2">Allocation Targets (on {fmt(investableExCash)} excl. cash reserve)</h3>
+              <p className="text-gray-400 text-xs mb-3">70% Equity / 15% Metals (60/40 Gold-Silver) / 10% Crypto / 5% Debt = 100%. Cash reserve ({fmt(cashFloor)}) set aside first. Physical RE covered by properties.</p>
+              {gapItems.map(g => <Bar key={g.label} label={g.label} pct={g.val / investableExCash * 100} color={g.color} value={g.val} target={g.target} />)}
+            </div>
+
+            {/* Gap Detail Table */}
+            <div className="bg-gray-800 rounded-xl p-4 mb-4">
+              <h3 className="font-bold mb-3 text-sm">Gap Detail</h3>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-gray-400 border-b border-gray-700">
+                    <th className="text-left py-1">Class</th>
+                    <th className="text-right">Current</th>
+                    <th className="text-right">Current %</th>
+                    <th className="text-right">Target %</th>
+                    <th className="text-right">Target $</th>
+                    <th className="text-right">Gap</th>
+                    <th className="text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gapItems.map(g => {
+                    const pct = g.val / investableExCash * 100;
+                    const tv = investableExCash * g.target / 100;
+                    const gap = g.val - tv;
+                    return (
+                      <tr key={g.label} className="border-b border-gray-800">
+                        <td className="py-1.5 font-medium" style={{ color: g.color }}>{g.label}</td>
+                        <td className="text-right">{fmt(g.val)}</td>
+                        <td className="text-right font-bold">{fmtP(pct)}</td>
+                        <td className="text-right text-gray-400">{g.target}%</td>
+                        <td className="text-right text-gray-400">{fmt(tv)}</td>
+                        <td className={`text-right font-bold ${gap >= 0 ? "text-green-400" : "text-red-400"}`}>{(gap >= 0 ? "+" : "") + fmt(gap)}</td>
+                        <td className="text-right text-gray-400">{gap >= 0 ? "Trim or hold" : "Add " + fmt(Math.abs(gap))}</td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="border-t-2 border-gray-600">
+                    <td className="py-1.5 font-medium text-green-400">Cash Reserve</td>
+                    <td className="text-right">{fmt(totalCash)}</td>
+                    <td className="text-right font-bold" colSpan={2}>Floor: {fmt(cashFloor)}</td>
+                    <td className="text-right" colSpan={2}>
+                      <span className="font-bold text-orange-400">Deploy {fmt(excessCash)}</span>
+                    </td>
+                    <td></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Where to deploy excess cash */}
+            <div className="bg-gray-800 rounded-xl p-4 mb-4">
+              <h3 className="font-bold text-sm mb-3">Rebalancing Roadmap — Deploy {fmt(excessCash)}</h3>
+              <p className="text-gray-400 text-xs mb-3">How to distribute the excess cash to close gaps:</p>
+              {(() => {
+                const gaps = gapItems.map(g => {
+                  const tv = investableExCash * g.target / 100;
+                  const gap = tv - g.val;
+                  return { ...g, gap: Math.max(gap, 0) };
+                });
+                const totalGap = gaps.reduce((s, g) => s + g.gap, 0);
+                return gaps.filter(g => g.gap > 0).map(g => {
+                  const alloc = totalGap > 0 ? Math.min(g.gap, excessCash * (g.gap / totalGap)) : 0;
+                  return (
+                    <div key={g.label} className="flex items-center gap-3 py-2 border-b border-gray-700">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: g.color }} />
+                      <div className="flex-1">
+                        <div className="text-sm font-medium">{g.label}</div>
+                        <div className="text-xs text-gray-500">Gap: {fmt(g.gap)} · Allocate: {fmt(alloc)} from excess cash</div>
+                      </div>
+                      <div className="font-bold text-sm" style={{ color: g.color }}>{fmt(alloc)}</div>
+                    </div>
+                  );
+                });
+              })()}
+              <div className="mt-3 text-xs text-gray-400">
+                Note: If excess cash ({fmt(excessCash)}) is less than total gaps, prioritize equity first (growth engine), then debt (stability), then fill others proportionally.
+              </div>
+            </div>
+
+            {/* Action Priority */}
+            <div className="bg-gray-800 rounded-xl p-4 text-sm">
+              <h3 className="font-bold mb-3">Action Priority</h3>
+              {[
+                { s: "\ud83d\udd34", l: "Deploy Excess Cash", m: `${fmt(excessCash)} sitting above your 1-year reserve. Every month at 0% vs 10% costs ~${fmt(Math.round(excessCash * 0.10 / 12))}.` },
+                { s: "\ud83d\udd34", l: "Debt/Fixed Income", m: `${fmtP((byCls["Debt"] || 0) / investableExCash * 100)} vs 5% target. Need ~${fmt(investableExCash * 0.05 - (byCls["Debt"] || 0))}.` },
+                { s: "\ud83d\udfe1", l: "Equity", m: `${fmtP(eqT / investableExCash * 100)} vs 70%. Will improve as excess cash is deployed.` },
+                { s: "\ud83d\udfe2", l: "Metals", m: `${fmtP((byCls["Metals"] || 0) / investableExCash * 100)} vs 7%. Near target.` },
+                { s: "\ud83d\udfe2", l: "Crypto", m: `${fmtP(cryT / investableExCash * 100)} vs 5%. Near target.` },
+                { s: "\ud83d\udfe2", l: "Real Estate", m: `Physical properties: ${fmt(reEquity)} equity. Covered.` },
+              ].map(g => (
+                <div key={g.l} className="flex gap-2 py-1.5 border-b border-gray-700">
+                  <span>{g.s}</span>
+                  <div className="text-xs"><span className="font-bold">{g.l}: </span><span className="text-gray-300">{g.m}</span></div>
+                </div>
+              ))}
+            </div>
+          </div>);
+        })()}
+
+        {/* RETIREMENT */}
+        {view === "retirement" && (() => {
+          // Correct projection: split portfolio into "invested" (earns market return) and "cash" (earns ~2%)
+          function retProj(cashToKeep, extraMo, rate) {
+            const cashRate = 0.02; // savings account ~2%
+            const deployed = Math.max(totalCash - cashToKeep, 0);
+            let invested = investedT + deployed; // investments + newly deployed cash
+            let cash = cashToKeep; // remaining cash
+            const annOwn = (RET_BASE_OWN + extraMo) * 12;
+            const annFixed = (RET_EMPLOYER + RET_CW) * 12;
+            const data = [{ age: 32, value: invested + cash }];
+
+            for (let y = 1; y <= 18; y++) {
+              let mult = 1.0;
+              if (y >= 2 && y <= 5) mult = 0.80;
+              if (y >= 6 && y <= 10) mult = 0.90;
+              if (y === 3) mult = 0.50;
+              const yOwn = annOwn * Math.pow(1.02, y) * mult;
+              const yFixed = annFixed * Math.pow(1.02, y);
+              invested = invested * (1 + rate) + yOwn + yFixed;
+              cash = cash * (1 + cashRate);
+              data.push({ age: 32 + y, value: invested + cash });
+            }
+            return data;
+          }
+
+          function findNeededMo(cashKeepVal, rate) {
+            let lo = 0, hi = 5000;
+            for (let i = 0; i < 30; i++) {
+              const mid = (lo + hi) / 2;
+              const p = retProj(cashKeepVal, mid, rate);
+              if (p[18].value < 5000000) lo = mid; else hi = mid;
+            }
+            return Math.ceil((lo + hi) / 2);
+          }
+
+          const deployable = Math.max(totalCash - retCashKeep, 0);
+          const needed = findNeededMo(retCashKeep, retRate);
+
+          const scenarios = [
+            { name: "A: Do Nothing", desc: "All cash stays, current savings only", ck: totalCash, extra: 0, color: "#6b7280", dashed: true },
+            { name: "B: Deploy Excess Cash", desc: `Move ${fmt(deployable)} to investments`, ck: retCashKeep, extra: 0, color: "#eab308" },
+            { name: "C: Deploy + $500/mo", desc: "Deploy cash + $500 more monthly", ck: retCashKeep, extra: 500, color: "#3b82f6" },
+            { name: "D: Deploy + $1,000/mo", desc: "Deploy cash + $1,000 more monthly", ck: retCashKeep, extra: 1000, color: "#22c55e" },
+            { name: `E: Deploy + ${fmt(needed)}/mo`, desc: "Exact extra to hit $5M", ck: retCashKeep, extra: needed, color: "#f97316" },
+          ].map(s => {
+            const d = retProj(s.ck, s.extra, retRate);
+            return { ...s, data: d, final: d[18].value, hits: d[18].value >= 5000000 };
+          });
+
+          // Custom scenario
+          const customD = retProj(retCashKeep, retExtra, retRate);
+          const customFinal = customD[18].value;
+
+          return (
+          <div className="space-y-4">
+            {/* Sliders */}
+            <div className="bg-gray-800 rounded-xl p-4">
+              <h3 className="font-bold text-sm mb-3">Scenario Controls</h3>
+              <div className="mb-3">
+                <div className="flex justify-between text-xs mb-1">
+                  <span>Cash to Keep (Emergency)</span>
+                  <span className="font-bold text-yellow-400">{fmt(retCashKeep)} ({(retCashKeep / 4500).toFixed(0)} months)</span>
+                </div>
+                <input type="range" min={20000} max={96000} step={2000} value={retCashKeep} onChange={e => setRetCashKeep(Number(e.target.value))}
+                  className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" style={{ accentColor: "#eab308" }} />
+                <div className="flex justify-between text-xs text-gray-600"><span>{fmt(20000)}</span><span>{fmt(96000)}</span></div>
+              </div>
+              <div className="mb-3">
+                <div className="flex justify-between text-xs mb-1">
+                  <span>Extra Monthly Investment</span>
+                  <span className="font-bold text-blue-400">+{fmt(retExtra)}/mo → Total: {fmt(RET_TOTAL_MO + retExtra)}/mo</span>
+                </div>
+                <input type="range" min={0} max={3000} step={100} value={retExtra} onChange={e => setRetExtra(Number(e.target.value))}
+                  className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" style={{ accentColor: "#3b82f6" }} />
+                <div className="flex justify-between text-xs text-gray-600"><span>$0</span><span>+$3,000/mo</span></div>
+              </div>
+              <div className="mb-1">
+                <div className="flex justify-between text-xs mb-1">
+                  <span>Expected Annual Return</span>
+                  <span className="font-bold text-green-400">{fmtP(retRate * 100)}</span>
+                </div>
+                <input type="range" min={0.06} max={0.14} step={0.005} value={retRate} onChange={e => setRetRate(Number(e.target.value))}
+                  className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" style={{ accentColor: "#22c55e" }} />
+                <div className="flex justify-between text-xs text-gray-600"><span>6%</span><span>14%</span></div>
+              </div>
+            </div>
+
+            {/* Custom result */}
+            <div className={`rounded-xl p-4 ${customFinal >= 5000000 ? "bg-green-900 bg-opacity-30 border border-green-700" : "bg-red-900 bg-opacity-30 border border-red-700"}`}>
+              <div className="grid grid-cols-4 gap-3 text-center">
+                <div>
+                  <div className="text-gray-400 text-xs">Deploy Now</div>
+                  <div className="font-bold text-orange-400">{fmt(deployable)}</div>
+                </div>
+                <div>
+                  <div className="text-gray-400 text-xs">Portfolio at 50</div>
+                  <div className={`text-xl font-bold ${customFinal >= 5000000 ? "text-green-400" : "text-red-400"}`}>{fmtK(customFinal)}</div>
+                </div>
+                <div>
+                  <div className="text-gray-400 text-xs">vs $5M</div>
+                  <div className={`font-bold ${customFinal >= 5000000 ? "text-green-400" : "text-red-400"}`}>
+                    {customFinal >= 5000000 ? "✅ +" + fmtK(customFinal - 5e6) : "❌ " + fmtK(5e6 - customFinal) + " short"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-gray-400 text-xs">4% SWR Income</div>
+                  <div className="font-bold text-blue-400">{fmt(customFinal * 0.04 / 12)}/mo</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Chart */}
+            <div className="bg-gray-800 rounded-xl p-4">
+              <h3 className="font-bold text-sm mb-2">Your Projection vs Pre-Built Scenarios</h3>
+              <RetChart scenarios={[
+                ...scenarios.map(s => ({ ...s, bold: false })),
+                { data: customD, color: customFinal >= 5e6 ? "#22c55e" : "#ef4444", bold: true, dashed: false },
+              ]} target={5000000} />
+              <div className="text-xs text-gray-500 mt-1">Bold line = your custom scenario · Others = pre-built comparisons</div>
+            </div>
+
+            {/* Pre-built table */}
+            <div className="bg-gray-800 rounded-xl p-4">
+              <h3 className="font-bold text-sm mb-3">Pre-Built Scenarios at {fmtP(retRate * 100)} Return</h3>
+              <table className="w-full text-xs">
+                <thead><tr className="text-gray-400 border-b border-gray-700"><th className="text-left py-1">Scenario</th><th className="text-right">Deployed</th><th className="text-right">Extra/mo</th><th className="text-right">At 50</th><th className="text-right">vs $5M</th></tr></thead>
+                <tbody>{scenarios.map(s => (
+                  <tr key={s.name} className="border-b border-gray-800">
+                    <td className="py-1.5"><div className="font-medium" style={{ color: s.color }}>{s.name}</div><div className="text-gray-500">{s.desc}</div></td>
+                    <td className="text-right">{fmt(Math.max(totalCash - s.ck, 0))}</td>
+                    <td className="text-right">{s.extra > 0 ? "+" + fmt(s.extra) : "—"}</td>
+                    <td className="text-right font-bold" style={{ color: s.hits ? "#22c55e" : "#eab308" }}>{fmtK(s.final)}</td>
+                    <td className={`text-right font-bold ${s.hits ? "text-green-400" : "text-red-400"}`}>{s.hits ? "✅ +" + fmtK(s.final - 5e6) : "❌ " + fmtK(5e6 - s.final)}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+
+            {/* Magic number */}
+            <div className="bg-green-900 bg-opacity-30 border border-green-700 rounded-xl p-4">
+              <div className="font-bold text-green-300 text-sm mb-1">🎯 Magic Number at {fmtP(retRate * 100)} Return</div>
+              <p className="text-xs text-green-200">
+                Deploy {fmt(deployable)} now + add <strong>{fmt(needed)}/mo</strong> to investments.
+                Your monthly surplus is {fmt(RET_SURPLUS)} — {needed <= RET_SURPLUS ? "completely doable with current income! ✅" : "would need budget tightening or income growth."}
+              </p>
+            </div>
+
+            {/* Year by year */}
+            <div className="bg-gray-800 rounded-xl p-4">
+              <h3 className="font-bold text-sm mb-2">Year-by-Year (Your Scenario)</h3>
+              <div className="grid grid-cols-7 gap-1.5">
+                {customD.filter((d, i) => i % 3 === 0 || i === 18).map(d => (
+                  <div key={d.age} className="bg-gray-700 rounded p-1.5 text-center text-xs">
+                    <div className="text-gray-400">Age {d.age}</div>
+                    <div className="font-bold" style={{ color: d.value >= 5e6 ? "#22c55e" : d.value >= 3e6 ? "#eab308" : "#6b7280" }}>{fmtK(d.value)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-blue-900 bg-opacity-30 border border-blue-800 rounded-lg p-3 text-xs">
+              <span className="font-bold text-blue-300">⚠️ </span>
+              <span className="text-blue-200">Not financial advice. Returns not guaranteed. Baby year reductions: 20% less savings yr 2-5, 50% less yr 3 (one spouse off), 10% less yr 6-10. Employer match + CW continue throughout. Cash earns ~2%.</span>
+            </div>
+          </div>);
+        })()}
+      </div>
+    </div>
+  );
+}
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
